@@ -2,10 +2,10 @@
 import dash
 import dash_core_components as dcc
 import dash_html_components as html
-import sqlite3
 import pandas as pd
 import plotly.graph_objs as go
 from datetime import datetime
+import numpy as np
 #from dash.dependencies import Input, Output
 
 #adds an index column to a historic prices dataframe
@@ -67,31 +67,62 @@ def get_date(index):
     
     return date
 
-#df uses the first sheet of the VarData files
-df = pd.read_csv("VaR530.csv")
-#adds the date column (dfd = df-date)
-dfd = df_with_dates(df)
+def adjust_fwd(df):
+    df.loc[ (df['UnderlyingFwd'] == 'XNHON18c'), 'UnderlyingFwd'] = 'FNYHOG18'
+    df.loc[ (df['UnderlyingFwd'] == 'XNHOQ18c'), 'UnderlyingFwd'] = 'FNYHOH18'
+    
+    df.loc[ (df['UnderlyingFwd'] == 'RBGCA'), 'UnderlyingFwd'] += "G18"
+    df.loc[ (df['UnderlyingFwd'] == 'RBGCD'), 'UnderlyingFwd'] += "G18"
+    df.loc[ (df['UnderlyingFwd'] == 'RBGCF'), 'UnderlyingFwd'] += "G18"
+    df.loc[ (df['UnderlyingFwd'] == 'RBGCH'), 'UnderlyingFwd'] += "G18"    
+    df.loc[ (df['UnderlyingFwd'] == 'RBGCM'), 'UnderlyingFwd'] += "G18"
+    df.loc[ (df['UnderlyingFwd'] == 'RBGCV'), 'UnderlyingFwd'] += "G18"
+    
+    df.loc[ (df['Desk'] == 'Natgas'), 'QtyBBL'] = df.loc[ (df['Desk'] == 'Natgas'), 'QtyMT']
 
-#dfprice uses the historic price files
-dfprice = pd.read_csv("HistoricalPrices.csv", header = None, names=['underlying', 'date', 'price'] )
+    df = df_with_dates(df)
+
+    df = df[df.UnderlyingFwd != 'XNRBK18c']
+    df = df[df.UnderlyingFwd != 'XNRBZ17c']
+    
+    df['QtyBBL'] = round(df['QtyBBL'])
+    
+    df = df.loc[df['QtyBBL'] != 0, :]
+    return df
+
+path = "S:\TradingSystemExtracts\Risk\DailyData\DailyPosition_{}0{}{}.csv".format(datetime.now().year, datetime.now().month, datetime.now().day)
+#df uses the first sheet of the VarData files
+dfd = pd.read_csv(path)
+
+dfd = adjust_fwd(dfd)
+
+#round qty
+dfd['QtyBBL'] = round(dfd['QtyBBL'])
+
+#dfi uses the historic price files
+dfi = pd.read_csv("S:\TradingSystemExtracts\Risk\DailyData\HistoricalPrices.csv", header = None, names=['underlying', 'date', 'price', 'name'],
+                  skiprows = 1)
 #adds the index column (dfi = df-index)
-dfi = df_with_index(dfprice)
+dfi = df_with_index(dfi)
 #adds the date column to dfi 
 dfi = df_with_dates_price(dfi)
+dfi.drop(0)
 
 #initializes the list of available choices for indexes to look at future curves for
-price_indexes = dfi['index'].unique()
+price_indexes = dfi['name'].unique()
 #initilializes the list of dates on which the futures where made
 dates = dfi['date'].unique()
-
+dates.sort()
+dfi = dfi.loc[~dfi.underlying.str.contains('SPNY'), :]
+dfi = dfi.loc[~dfi.underlying.str.contains('SPNX'), :]
 #initializes lists of available choices and includes the option for All
-desks = ['All'] #currently not in use
-products = ['All']
+desks = []
+products = []
 #indexes is left empty because comapring all indexes against eachother would take a long time to load
 indexes = []
 
 #populates each list with the possible choices
-desks.extend(dfd['Desk'].unique()) #currently not in use
+desks.extend(dfd['Desk'].unique())
 indexes.extend(dfd['Index'].unique())
 products.extend(dfd['Product1'].unique())
 
@@ -101,14 +132,24 @@ app = dash.Dash()
 #the layout of the app
 app.layout = html.Div(children=[
     
+
+    html.Div([
+        'Desk',
+        dcc.Dropdown(
+            id = 'desk_drop',
+            options=[{'label':i, 'value':i} for i in desks],
+            multi = True,
+            value = ''
+        )
+    ]),
     #drop down box of available products
     html.Div([
         'Products:',
         dcc.Dropdown(
             id = 'prod_drop',
             options=[{'label':i, 'value':i} for i in products],
-            #inital value set to 'All'
-            value = products[0]
+            multi = True,
+            value = ''
         )
     ]),
     #drop down box of avaialable indexes 
@@ -118,7 +159,7 @@ app.layout = html.Div(children=[
             id = 'ind_drop',
             options=[{'label':i, 'value':i} for i in indexes],
             multi = True,
-            value = indexes[0]
+            value = ''
         )
     ]),
     #Button that adds all indexes fot the given product back into the ind_drop box
@@ -176,12 +217,27 @@ app.layout = html.Div(children=[
             options = [{'label':i, 'value':i} for i in dates],
             #initially set to display the most recent date available
             value = dates[-1]
-        )
-    ]),
+        )],style={'width': '25%', 'display': 'inline-block'}
+    ),
     #displays the historic prices of the given forwards
     html.Div([
         dcc.Graph(
             id = 'historic_prices'
+        )
+    ]),
+     # Checklist for technical indicators
+    html.Div([
+        dcc.Checklist(
+            id = 'technicals',
+            options = [{'label': 'EWMA', 'value' : 'ewma'},
+                       {'label': 'Bollinger Bands', 'value' : 'bb'}],
+            values = []
+        )
+    ]),
+    # Returns distribution
+    html.Div([
+        dcc.Graph(
+            id = 'return_dist'
         )
     ])
 ])
@@ -190,60 +246,68 @@ app.layout = html.Div(children=[
 @app.callback(
     dash.dependencies.Output('main_graph', 'figure'),
     [dash.dependencies.Input('ind_drop', 'value'),
-    dash.dependencies.Input('prod_drop', 'value')]
+    dash.dependencies.Input('prod_drop', 'value'),
+    dash.dependencies.Input('desk_drop', 'value')]
 )
-def update_graph(ind, prod):
-    #dfd1 takes dfd and filters out only the chosen product to look at
-    dfd1 = dfd[ (dfd['Product1'] == prod) ]
-    #it also gets rid of Zero positions
-    dfd1 = dfd1[ (dfd['QtyBBL'] != 0) ]
+def update_graph(ind, prod, desk):
+
     #traces is going to be a list of data that allows multiple different indexes to be displayed 
     traces = []
-    #for each index that is chosen in the ind_drop
-    for i in ind:
-        #dfd2 uses the filters that dfd1 applied and filters out each index from dfd1
-        #dfd2 is a temporary dataframe that is reset for each chosen index
-        dfd2 = dfd1[ (dfd1['Index'] == i) ]
-        #dfd has already created a column with dates in the format of "Month Year" as a string
-        #but now those need to be converted into datetime objects so they are displayed properly on the graph
-        real_dates = []
-        #for each of the dates convert it into a datetime object and then put it into real_dates[]
-        #the datetime objects are the "real" dates because they actually represent a date and aren't just strings
-        for d in dfd2['forward_date']:
-            dt = datetime.strptime(d, '%b %Y')
-            real_dates.append(dt)
-        #dfd_real is a separate dataframe that holds the datetime objects of each forward and the positions assocaited with them
-        #dfd_real is a temporary dataframe that is used when 
-        dfd_real = dfd2[['QtyBBL']].copy()
-        dfd_real['real_dates'] = real_dates
-        #final_qty is a list of the sums of all positions associated with the given index
-        final_qty = []
-        #sums up all of the positions of an index on a given date d
-        for d in dfd_real['real_dates'].unique():
-            qty = 0
-            #dfd3 is a temporary dataframe that represents data for a single month and a single index
-            dfd3 = dfd_real[ (dfd_real['real_dates'] == d) ]
-            #add up each position for a given index of a given month
-            for q in dfd3['QtyBBL']:
-                qty = qty + q
-            #put the sum into the final_qty list
-            final_qty.append(qty)
-        #dfd_final is initialized as an empty dataframe
-        #dfd_final is a dataframe that holds all the dates and the sum of all positions for each month
-        dfd_final = pd.DataFrame()
-        #it only holds the data for one index so it only needs one copy of each date
-        dfd_final['real_dates'] = dfd_real['real_dates'].unique()
-        dfd_final['qty'] = final_qty
-        dfd_final.sort_values(by=['real_dates'], inplace=True)
+    
+    for de in desk:
+        dfd_temp = dfd[ (dfd['Desk'] == de) ]
 
-        #the current trace 
-        cur_trace = go.Bar(
-                x = dfd_final.real_dates,
-                y = dfd_final.qty.values,
-                name = i
-            )
-        #the trace is added to the list of traces
-        traces.append(cur_trace)
+        for p in prod:
+            dfd1 = dfd_temp[ (dfd_temp['Product1'] == p) ]
+            #for each index that is chosen in the ind_drop
+            for i in ind:
+                #dfd2 uses the filters that dfd1 applied and filters out each index from dfd1
+                #dfd2 is a temporary dataframe that is reset for each chosen index
+                dfd2 = dfd1[ (dfd1['Index'] == i) ]
+                #dfd has already created a column with dates in the format of "Month Year" as a string
+                #but now those need to be converted into datetime objects so they are displayed properly on the graph
+                real_dates = []
+                #for each of the dates convert it into a datetime object and then put it into real_dates[]
+                #the datetime objects are the "real" dates because they actually represent a date and aren't just strings
+                for d in dfd2['forward_date']:
+                    dt = datetime.strptime(d, '%b %Y')
+                    real_dates.append(dt)
+                #dfd_real is a separate dataframe that holds the datetime objects of each forward and the positions assocaited with them
+                #dfd_real is a temporary dataframe that is used when 
+                dfd_real = dfd2[['QtyBBL']].copy()
+                dfd_real['real_dates'] = real_dates
+                #final_qty is a list of the sums of all positions associated with the given index
+                final_qty = []
+                #sums up all of the positions of an index on a given date d
+                for d in dfd_real['real_dates'].unique():
+                    qty = 0
+                    #dfd3 is a temporary dataframe that represents data for a single month and a single index
+                    dfd3 = dfd_real[ (dfd_real['real_dates'] == d) ]
+                    #add up each position for a given index of a given month
+                    for q in dfd3['QtyBBL']:
+                        qty = qty + q
+                    #put the sum into the final_qty list
+                    final_qty.append(qty)
+
+                final_qty = [round(x) for x in final_qty]
+                #dfd_final is initialized as an empty dataframe
+                #dfd_final is a dataframe that holds all the dates and the sum of all positions for each month
+                dfd_final = pd.DataFrame()
+                #it only holds the data for one index so it only needs one copy of each date
+                dfd_final['real_dates'] = dfd_real['real_dates'].unique()
+                dfd_final['qty'] = final_qty
+                #dfd_final.sort_values(by=['real_dates'], inplace=True)
+                dfd_final = dfd_final[ (dfd_final['qty'] != 0) ]
+
+                name = i + " in " + p + " in " + de
+                #the current trace 
+                cur_trace = go.Bar(
+                        x = dfd_final.real_dates,
+                        y = dfd_final.qty.values,
+                        name = name
+                    )
+                #the trace is added to the list of traces
+                traces.append(cur_trace)
 
     return {
         'data': traces,
@@ -262,26 +326,27 @@ def update_graph(ind, prod):
 @app.callback(
     dash.dependencies.Output('ind_drop', 'value'),
     [dash.dependencies.Input('all_button', 'n_clicks'),
-    dash.dependencies.Input('prod_drop', 'value')]
+    dash.dependencies.Input('prod_drop', 'value'),
+    dash.dependencies.Input('desk_drop', 'value')]
 )
-def choose_all(n_clicks, prod):
-    #when all products are selected it doesn't display any indexes
-    if prod == 'All':
-        return ""
-    else:
-        df_temp = dfd[ (dfd['Product1'] == prod) ]
-        df_temp = df_temp[ (df_temp['QtyBBL'] != 0) ]
-        df_temp = df_temp[ (df_temp['Product1'] == prod) ]
-        #all these indexes have underlying forwards that don't end in month and year characters
-        #this makes them impossible to place in the graph so they are omitted
-        df_temp = df_temp[ (df_temp['Index'] != 'COLONIAL A PIPE') ]
-        df_temp = df_temp[ (df_temp['Index'] != 'COLONIAL D PIPE') ]
-        df_temp = df_temp[ (df_temp['Index'] != 'COLONIAL F PIPE') ]
-        df_temp = df_temp[ (df_temp['Index'] != 'COLONIAL H PIPE') ]
-        df_temp = df_temp[ (df_temp['Index'] != 'COLONIAL M PIPE') ]
-        df_temp = df_temp[ (df_temp['Index'] != 'NYMEX RBOB GCV') ]
-        return df_temp['Index'].unique()
+def choose_all(n_clicks, prod, desk):
 
+    indexes2 = []
+    
+    for de in desk:
+        df_temp = dfd[ (dfd['Desk'] == de) ]
+
+        for p in prod:
+            df_temp2 = df_temp[ (df_temp['Product1'] == p) ]
+            indexes2.extend(df_temp2['Index'].unique())
+
+    return indexes2
+
+
+    
+
+
+    
 
 #makes sure you can only choose indexes that are part of the currently chosen product
 @app.callback(
@@ -291,25 +356,26 @@ def choose_all(n_clicks, prod):
 def update_forward_options(prod):
     #Initializes the list of indexes
     indexes2 = []
-    dfd_temp = dfd[ (dfd['QtyBBL'] != 0) ]
-    if prod == 'All':    
-        #if prod is 'All' all indexes are available to choose
-        indexes2.extend(dfd_temp['Index'].unique())
-    else:
-        #if prod is specified then only get indexes associated with said product
-        dfd_temp = dfd_temp[ (dfd_temp['Product1'] == prod) ]
-        #all these indexes have underlying forwards that don't end in month and year characters
-        #this makes them impossible to place in the graph so they are omitted
-        dfd_temp = dfd_temp[ (dfd_temp['Index'] != 'COLONIAL A PIPE') ]
-        dfd_temp = dfd_temp[ (dfd_temp['Index'] != 'COLONIAL D PIPE') ]
-        dfd_temp = dfd_temp[ (dfd_temp['Index'] != 'COLONIAL F PIPE') ]
-        dfd_temp = dfd_temp[ (dfd_temp['Index'] != 'COLONIAL H PIPE') ]
-        dfd_temp = dfd_temp[ (dfd_temp['Index'] != 'COLONIAL M PIPE') ]
-        dfd_temp = dfd_temp[ (dfd_temp['Index'] != 'NYMEX RBOB GCV') ]
-        #dfd_temp = dfd_temp[ (dfd_temp['Index'] != 'NY BARGE F') ]
+    for p in prod:
+        dfd_temp = dfd[ (dfd['Product1'] == p) ]
         indexes2.extend(dfd_temp['Index'].unique())
 
     return [{'label':i, 'value':i} for i in indexes2]
+
+#sets the options for products to be only ones inside the available desk
+@app.callback(
+    dash.dependencies.Output('prod_drop', 'options'),
+    [dash.dependencies.Input('desk_drop', 'value')]
+)
+def update_product_options(desk):
+    prods = []
+    for de in desk:
+        dfd_temp = dfd[ (dfd['Desk'] == de) ]
+        for p in prods:
+            dfd_temp = dfd_temp[ (dfd_temp['Product1'] != p) ]
+        prods.extend(dfd_temp['Product1'].unique())
+    
+    return [{'label':i, 'value':i} for i in prods]
 
 
 #changes the future curve graph based on the index(es) chosen in index_drop (and index2_drop if comp_check is checked)
@@ -323,7 +389,7 @@ def update_forward_options(prod):
 def update_price(index, index2, date, comp):
     traces = []
     #dfi1 filters out only data for the given index and the given purchase date and any prices that are at or below 0
-    dfi1 = dfi[ (dfi['index'] == index) ]
+    dfi1 = dfi[ (dfi['name'] == index) ]
     dfi1 = dfi1[ (dfi1['date'] == date) ]
     dfi1 = dfi1[ (dfi1['price'] > 0) ]
     real_dates = []
@@ -340,11 +406,12 @@ def update_price(index, index2, date, comp):
     trace1 = go.Scatter(
         x = df_real.real_dates,
         y = df_real.price.values,
-        text =  df_real['underlying']
+        text =  df_real['underlying'],
+        name = index
     )
     traces.append(trace1)
     if 'comp' in comp:
-        dfi2 = dfi[ (dfi['index'] == index2) ]
+        dfi2 = dfi[ (dfi['name'] == index2) ]
         dfi2 = dfi2[ (dfi2['date'] == date) ]
         dfi2 = dfi2[ (dfi2['price'] > 0) ]
         real_dates2 = []
@@ -358,7 +425,8 @@ def update_price(index, index2, date, comp):
         trace2 = go.Scatter(
                     x = df_real2.real_dates,
                     y = df_real2.price.values,
-                    text =  df_real2['underlying']
+                    text =  df_real2['underlying'],
+                    name = index
                 )
         traces.append(trace2)
 
@@ -369,54 +437,114 @@ def update_price(index, index2, date, comp):
             xaxis = {
                 'tickangle': -45,
                 'dtick': 'M1'
+            },
+            legend={'x' : 0,
+                    'y': 1.25,
+                    'font' : {'size': 10},
+                    'orientation' : 'h'
             }
         )
     }   
 
+#shows the historical price of the forwards that are being hovered over in the price_graph
 @app.callback(
     dash.dependencies.Output('historic_prices', 'figure'),
     [dash.dependencies.Input('price_graph', 'hoverData'),
-    dash.dependencies.Input('comp_check', 'values')]
+    dash.dependencies.Input('comp_check', 'values'),
+    dash.dependencies.Input('technicals', 'values')]
 )
-def historic_prices(hover, comp):
+def historic_prices(hover, comp, tech):
     traces = []
     hover_text1 = hover['points'][0]['text']
-    df1 = dfprice[ (dfprice['underlying'] == hover_text1) ]
-    df1 = df1[ (df1['price'] > 0) ]
+    df1 = dfi[ (dfi['underlying'] == hover_text1) ]
+    df1 = df1[ (df1['price'].astype(float) > 0) ]
     real_dates1 = []
     for d in df1['date']:
-        dt = datetime.strptime(d, '%m/%d/%Y')
+        dt = datetime.strptime(d, '%Y-%m-%d')
         real_dates1.append(dt)
     df_real1 = df1[['price']].copy()
     df_real1['real_dates'] = real_dates1
     df_real1.sort_values(by=['real_dates'], inplace=True)
     trace1 = go.Scatter(
         x = df_real1.real_dates,
-        y = df_real1.price.values
+        y = df_real1.price.values,
+        name = hover_text1
     )
     traces.append(trace1)
+    
+    if 'ewma' in tech:
+        ewm = go.Scatter(
+                x = df_real1.real_dates,
+                y = df_real1.price.ewm(span = 20).mean().values,
+                name = hover_text1 + " EWMA",
+                line = {'dash':'dash'}
+        )       
+        traces.append(ewm)
+        
+    if 'bb' in tech:
+        uband = go.Scatter(
+                x = df_real1.real_dates,
+                y = df_real1.price.ewm(span = 20).mean().values + df_real1.price.ewm(span = 20).std().values,
+                name = hover_text1 + " UBand",
+                line = {'dash':'dash'}
+        )       
+        traces.append(uband)
+        lband = go.Scatter(
+                x = df_real1.real_dates,
+                y = df_real1.price.ewm(span = 20).mean().values - df_real1.price.ewm(span = 20).std().values,
+                name = hover_text1 + " LBand",
+                line = {'dash':'dash'}
+        )
+        traces.append(lband)
 
     if 'comp' in comp:
         hover_text2 = hover['points'][1]['text']
-        df2 = dfprice[ (dfprice['underlying'] == hover_text2) ]
-        df2 = df2[ (df2['price'] > 0) ]
+        df2 = dfi[ (dfi['underlying'] == hover_text2) ]
+        df2 = df2[ (df2['price'].astype(float) > 0) ]
         real_dates2 = []
         for d in df2['date']:
-            dt = datetime.strptime(d, '%m/%d/%Y')
+            dt = datetime.strptime(d, '%Y-%m-%d')
             real_dates2.append(dt)
         df_real2 = df2[['price']].copy()
         df_real2['real_dates'] = real_dates2
         df_real2.sort_values(by=['real_dates'], inplace=True)
         trace2 = go.Scatter(
             x = df_real2.real_dates,
-            y = df_real2.price.values
+            y = df_real2.price.values,
+            name = hover_text2
         )
         traces.append(trace2)
-
-        title = '<b>{}'.format(hover_text1) + " and " + hover_text2 + " historical prices"
+        
+        if 'ewma' in tech:
+            trace4 = go.Scatter(
+                    x = df_real2.real_dates,
+                    y = df_real2.price.ewm(span = 20).mean().values,
+                    name = hover_text2 + " EWMA",
+                    mode = 'dash'
+            )       
+            traces.append(trace4)
+        
+        if 'bb' in tech:
+            uband = go.Scatter(
+                    x = df_real2.real_dates,
+                    y = df_real2.price.ewm(span = 20).mean().values + df_real2.price.ewm(span = 20).std().values,
+                    name = hover_text2 + " UBand",
+                    line = {'dash':'dash'}
+            )       
+            traces.append(uband)
+            lband = go.Scatter(
+                    x = df_real2.real_dates,
+                    y = df_real2.price.ewm(span = 20).mean().values - df_real2.price.ewm(span = 20).std().values,
+                    name = hover_text2 + " LBand",
+                    line = {'dash':'dash'}
+            )
+            traces.append(lband)
+        
+      
+        title = '<b>{}'.format(hover_text1) + " and " + hover_text2 + " Historical Price"
 
     else: 
-        title = '<b>{}'.format(hover_text1) + " historical prices"
+        title = '<b>{}'.format(hover_text1) + " Historical Prices"
         
     return {
         'data': traces,
@@ -428,13 +556,94 @@ def historic_prices(hover, comp):
             }],
             xaxis = {
                 'tickangle': -45
-            }
+            },
+            legend={'x' : 0,
+                    'y': 1.25,
+                    'font' : {'size': 10},
+                    'orientation' : 'h'
+                    }
         )
             
     }
 
-
-
+@app.callback(
+    dash.dependencies.Output('return_dist', 'figure'),
+    [dash.dependencies.Input('price_graph', 'hoverData'),
+     dash.dependencies.Input('comp_check', 'values')]
+)
+def return_distributions(hover, comp):
+    ret = []
+    hover_text1 = hover['points'][0]['text']
+    df1 = dfi[ (dfi['underlying'] == hover_text1) ]
+    df1 = df1[ (df1['price'].astype(float) > 0) ]
+    real_dates1 = []
+    for d in df1['date']:
+        dt = datetime.strptime(d, '%Y-%m-%d')
+        real_dates1.append(dt)
+    df_real1 = df1[['price']].copy()
+    df_real1['real_dates'] = real_dates1
+    df_real1.sort_values(by=['real_dates'], inplace=True)
+    returns1 = df_real1.price.astype(float).values - df_real1.price.astype(float).shift(1)
+    returns1.index = df_real1['real_dates']
+    returns1 = returns1[~np.isnan(returns1)]
+    ret1 = go.Histogram(
+        x = returns1,
+        name = hover_text1,
+        opacity = .75
+        
+    )
+    corr = 1
+    ret.append(ret1)
+    if 'comp' in comp:
+        hover_text2 = hover['points'][1]['text']
+        df2 = dfi[ (dfi['underlying'] == hover_text2) ]
+        df2 = df2[ (df2['price'].astype(float) > 0) ]
+        real_dates2 = []
+        for d in df2['date']:
+            dt = datetime.strptime(d, '%Y-%m-%d')
+            real_dates2.append(dt)
+        df_real2 = df2[['price']].copy()
+        df_real2['real_dates'] = real_dates2
+        df_real2.sort_values(by=['real_dates'], inplace=True)
+        returns2 = df_real2.price.astype(float) - df_real2.price.astype(float).shift(1)
+        returns2.index = df_real2['real_dates']
+        returns2 = returns2[~np.isnan(returns2)]
+        ret2 = go.Histogram(
+            x = returns2,
+            name = hover_text2,
+            opacity = .5
+        )
+        ret.append(ret2)
+        
+        if returns1.shape[0] > returns2.shape[0]:
+            mask = [idx in returns2.index for idx in returns1.index]
+            returns1 = returns1[mask]
+            mask = [idx in returns1.index for idx in returns2.index]
+            returns2 = returns2[mask]
+        else: 
+            mask = [idx in returns1.index for idx in returns2.index]
+            returns2 = returns2[mask]
+            mask = [idx in returns2.index for idx in returns1.index]
+            returns1 = returns1[mask]
+        
+        corr = np.corrcoef(returns1, returns2)[0][1]
+            
+        
+    return {
+        'data': ret,
+        'layout' : go.Layout(
+                barmode='stack',
+                
+                annotations = [{'x': 0, 'y': 1, 'xanchor': 'left', 'yanchor': 'bottom',
+                    'xref': 'paper', 'yref': 'paper', 'showarrow': False,
+                    'align': 'left', 'bgcolor': 'rgba(255, 255, 255, 0.5)',
+                    'text': "<b>{}".format("Return Distribution")
+            }, {'x': .25, 'y': 1, 'xanchor': 'left', 'yanchor': 'bottom',
+                    'xref': 'paper', 'yref': 'paper', 'showarrow': False,
+                    'align': 'center', 'bgcolor': 'rgba(255, 255, 255, 0.5)',
+                    'text': "Correlation = {:+.4f}".format(corr)}]
+        )
+    }
 
 #Runs the app
 if __name__ == '__main__':
