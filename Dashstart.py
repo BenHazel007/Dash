@@ -120,11 +120,13 @@ desks = []
 products = []
 #indexes is left empty because comapring all indexes against eachother would take a long time to load
 indexes = []
+p_types = []
 
 #populates each list with the possible choices
 desks.extend(dfd['Desk'].unique())
 indexes.extend(dfd['Index'].unique())
 products.extend(dfd['Product1'].unique())
+p_types.extend(dfd['PositionType'].unique())
 
 #initializes the app itself
 app = dash.Dash()
@@ -167,6 +169,15 @@ app.layout = html.Div(children=[
         'All Indexes',
         id = 'all_button'
     ),
+    html.Div([
+        'Position Type:',
+        dcc.Dropdown(
+            id = 'pos_type_drop',
+            options=[{'label':i, 'value':i} for  i in p_types],
+            multi = True,
+            value = ''
+        )
+    ]),
     #
     html.Div([
         #the poisitions graph
@@ -206,6 +217,7 @@ app.layout = html.Div(children=[
     ]),
     #the graph that displays the future curves
     html.Div([
+        'Futures Curve',
         dcc.Graph(
             id = 'price_graph'
         )
@@ -247,9 +259,10 @@ app.layout = html.Div(children=[
     dash.dependencies.Output('main_graph', 'figure'),
     [dash.dependencies.Input('ind_drop', 'value'),
     dash.dependencies.Input('prod_drop', 'value'),
-    dash.dependencies.Input('desk_drop', 'value')]
+    dash.dependencies.Input('desk_drop', 'value'),
+    dash.dependencies.Input('pos_type_drop', 'value')]
 )
-def update_graph(ind, prod, desk):
+def update_graph(ind, prod, desk, pos_type):
 
     #traces is going to be a list of data that allows multiple different indexes to be displayed 
     traces = []
@@ -264,50 +277,82 @@ def update_graph(ind, prod, desk):
                 #dfd2 uses the filters that dfd1 applied and filters out each index from dfd1
                 #dfd2 is a temporary dataframe that is reset for each chosen index
                 dfd2 = dfd1[ (dfd1['Index'] == i) ]
-                #dfd has already created a column with dates in the format of "Month Year" as a string
-                #but now those need to be converted into datetime objects so they are displayed properly on the graph
-                real_dates = []
-                #for each of the dates convert it into a datetime object and then put it into real_dates[]
-                #the datetime objects are the "real" dates because they actually represent a date and aren't just strings
-                for d in dfd2['forward_date']:
-                    dt = datetime.strptime(d, '%b %Y')
-                    real_dates.append(dt)
-                #dfd_real is a separate dataframe that holds the datetime objects of each forward and the positions assocaited with them
-                #dfd_real is a temporary dataframe that is used when 
-                dfd_real = dfd2[['QtyBBL']].copy()
-                dfd_real['real_dates'] = real_dates
-                #final_qty is a list of the sums of all positions associated with the given index
-                final_qty = []
-                #sums up all of the positions of an index on a given date d
-                for d in dfd_real['real_dates'].unique():
-                    qty = 0
-                    #dfd3 is a temporary dataframe that represents data for a single month and a single index
-                    dfd3 = dfd_real[ (dfd_real['real_dates'] == d) ]
-                    #add up each position for a given index of a given month
-                    for q in dfd3['QtyBBL']:
-                        qty = qty + q
-                    #put the sum into the final_qty list
-                    final_qty.append(qty)
+                if pos_type:
+                    for pos in pos_type:
+                        dfd2_pos = dfd2[ (dfd2['PositionType'] == pos) ]
+                        #dfd has already created a column with dates in the format of "Month Year" as a string
+                        #but now those need to be converted into datetime objects so they are displayed properly on the graph
+                        real_dates = []
+                        #for each of the dates convert it into a datetime object and then put it into real_dates[]
+                        #the datetime objects are the "real" dates because they actually represent a date and aren't just strings
+                        for d in dfd2_pos['forward_date']:
+                            dt = datetime.strptime(d, '%b %Y')
+                            real_dates.append(dt)
+                        #dfd_real is a separate dataframe that holds the datetime objects of each forward and the positions assocaited with them
+                        #dfd_real is a temporary dataframe that is used when 
+                        dfd_real = dfd2_pos[['QtyBBL']].copy()
+                        dfd_real['real_dates'] = real_dates
+                        #final_qty is a list of the sums of all positions associated with the given index
+                        final_qty = []
+                        #sums up all of the positions of an index on a given date d
+                        for d in dfd_real['real_dates'].unique():
+                            qty = 0
+                            #dfd3 is a temporary dataframe that represents data for a single month and a single index
+                            dfd3 = dfd_real[ (dfd_real['real_dates'] == d) ]
+                            #add up each position for a given index of a given month
+                            for q in dfd3['QtyBBL']:
+                                qty = qty + q
+                            #put the sum into the final_qty list
+                            final_qty.append(qty)
 
-                final_qty = [round(x) for x in final_qty]
-                #dfd_final is initialized as an empty dataframe
-                #dfd_final is a dataframe that holds all the dates and the sum of all positions for each month
-                dfd_final = pd.DataFrame()
-                #it only holds the data for one index so it only needs one copy of each date
-                dfd_final['real_dates'] = dfd_real['real_dates'].unique()
-                dfd_final['qty'] = final_qty
-                #dfd_final.sort_values(by=['real_dates'], inplace=True)
-                dfd_final = dfd_final[ (dfd_final['qty'] != 0) ]
+                        final_qty = [round(x) for x in final_qty]
+                        #dfd_final is initialized as an empty dataframe
+                        #dfd_final is a dataframe that holds all the dates and the sum of all positions for each month
+                        dfd_final = pd.DataFrame()
+                        #it only holds the data for one index so it only needs one copy of each date
+                        dfd_final['real_dates'] = dfd_real['real_dates'].unique()
+                        dfd_final['qty'] = final_qty
+                        #dfd_final.sort_values(by=['real_dates'], inplace=True)
+                        dfd_final = dfd_final[ (dfd_final['qty'] != 0) ]
 
-                name = i + " in " + p + " in " + de
-                #the current trace 
-                cur_trace = go.Bar(
-                        x = dfd_final.real_dates,
-                        y = dfd_final.qty.values,
-                        name = name
-                    )
-                #the trace is added to the list of traces
-                traces.append(cur_trace)
+                        name = i + " in " + p + " in " + de + " as " + pos
+                        #the current trace 
+                        cur_trace = go.Bar(
+                                x = dfd_final.real_dates,
+                                y = dfd_final.qty.values,
+                                name = name
+                            )
+                        #the trace is added to the list of traces
+                        traces.append(cur_trace)
+                else:
+                    
+                    real_dates = []
+                    for d in dfd2['forward_date']:
+                        dt = datetime.strptime(d, '%b %Y')
+                        real_dates.append(dt)
+                    dfd_real = dfd2[['QtyBBL']].copy()
+                    dfd_real['real_dates'] = real_dates
+                    final_qty = []
+                    for d in dfd_real['real_dates'].unique():
+                        qty = 0
+                        dfd3 = dfd_real[ (dfd_real['real_dates'] == d) ]
+                        for q in dfd3['QtyBBL']:
+                            qty = qty + q
+                        final_qty.append(qty)
+
+                    final_qty = [round(x) for x in final_qty]
+                    dfd_final = pd.DataFrame()
+                    dfd_final['real_dates'] = dfd_real['real_dates'].unique()
+                    dfd_final['qty'] = final_qty
+                    dfd_final = dfd_final[ (dfd_final['qty'] != 0) ]
+
+                    name = i + " in " + p + " in " + de
+                    cur_trace = go.Bar(
+                            x = dfd_final.real_dates,
+                            y = dfd_final.qty.values,
+                            name = name
+                        )
+                    traces.append(cur_trace)
 
     return {
         'data': traces,
@@ -335,7 +380,6 @@ def choose_all(n_clicks, prod, desk):
     
     for de in desk:
         df_temp = dfd[ (dfd['Desk'] == de) ]
-
         for p in prod:
             df_temp2 = df_temp[ (df_temp['Product1'] == p) ]
             indexes_temp = df_temp2['Index'].unique()
@@ -355,6 +399,28 @@ def update_forward_options(options):
     for o in options:
         values.append(o['value'])
     return values
+
+@app.callback(
+    dash.dependencies.Output('pos_type_drop', 'options'),
+    [dash.dependencies.Input('desk_drop', 'value'),
+    dash.dependencies.Input('prod_drop', 'value'),
+    dash.dependencies.Input('ind_drop', 'value')]
+)
+def update_pos_type_options(desk, prod, ind):
+    pos_types2 = []
+    
+    for de in desk:
+        df_temp = dfd[ (dfd['Desk'] == de) ]
+        for p in prod:
+            df_temp2 = df_temp[ (df_temp['Product1'] == p) ]
+            for i in ind:
+                df_temp3 = df_temp2[ (df_temp2['Index'] == i) ]
+                pos_types_temp = df_temp3['PositionType'].unique()
+                for pos in pos_types_temp:
+                    if pos not in pos_types2:
+                        pos_types2.append(pos)
+
+    return [{'label':i, 'value':i} for i in pos_types2]
 
 #sets the options for products to be only ones inside the available desk
 @app.callback(
@@ -534,7 +600,7 @@ def historic_prices(hover, comp, tech):
                     x = df_real2.real_dates,
                     y = df_real2.price.ewm(span = 20).mean().values - df_real2.price.ewm(span = 20).std().values,
                     name = hover_text2 + " LBand",
-                    line = {'dash':'dash', 'color':'rgb(191,87,0)'}
+                    line = {'dash':'dash', 'color':'rgb(191,87,0)'} #\m/
             )
             traces.append(lband)
         
