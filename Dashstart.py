@@ -90,7 +90,7 @@ def adjust_fwd(df):
     df = df.loc[df['QtyBBL'] != 0, :]
     return df
 
-path = "S:\TradingSystemExtracts\Risk\DailyData\DailyPosition_{}0{}{}.csv".format(datetime.now().year, datetime.now().month, datetime.now().day)
+path = "S:\TradingSystemExtracts\Risk\DailyData\DailyPosition_{}0{}0{}.csv".format(datetime.now().year, datetime.now().month, datetime.now().day)
 #df uses the first sheet of the VarData files
 dfd = pd.read_csv(path)
 
@@ -324,7 +324,7 @@ def update_graph(ind, prod, desk):
     
 #when a product is chosen or when the "All Indexes" button is pressed all indexes are added to ind_drop
 @app.callback(
-    dash.dependencies.Output('ind_drop', 'value'),
+    dash.dependencies.Output('ind_drop', 'options'),
     [dash.dependencies.Input('all_button', 'n_clicks'),
     dash.dependencies.Input('prod_drop', 'value'),
     dash.dependencies.Input('desk_drop', 'value')]
@@ -338,29 +338,23 @@ def choose_all(n_clicks, prod, desk):
 
         for p in prod:
             df_temp2 = df_temp[ (df_temp['Product1'] == p) ]
-            indexes2.extend(df_temp2['Index'].unique())
+            indexes_temp = df_temp2['Index'].unique()
+            for i in indexes_temp:
+                if i not in indexes2:
+                    indexes2.append(i)
 
-    return indexes2
-
-
-    
-
-
-    
+    return [{'label':i, 'value':i} for i in indexes2]
 
 #makes sure you can only choose indexes that are part of the currently chosen product
 @app.callback(
-    dash.dependencies.Output('ind_drop', 'options'),
-    [dash.dependencies.Input('prod_drop', 'value')]
+    dash.dependencies.Output('ind_drop', 'value'),
+    [dash.dependencies.Input('ind_drop', 'options')]
 )
-def update_forward_options(prod):
-    #Initializes the list of indexes
-    indexes2 = []
-    for p in prod:
-        dfd_temp = dfd[ (dfd['Product1'] == p) ]
-        indexes2.extend(dfd_temp['Index'].unique())
-
-    return [{'label':i, 'value':i} for i in indexes2]
+def update_forward_options(options):
+    values = []
+    for o in options:
+        values.append(o['value'])
+    return values
 
 #sets the options for products to be only ones inside the available desk
 @app.callback(
@@ -407,7 +401,8 @@ def update_price(index, index2, date, comp):
         x = df_real.real_dates,
         y = df_real.price.values,
         text =  df_real['underlying'],
-        name = index
+        name = index,
+        line = {'color':'rgb(44,91,218)'}
     )
     traces.append(trace1)
     if 'comp' in comp:
@@ -426,7 +421,8 @@ def update_price(index, index2, date, comp):
                     x = df_real2.real_dates,
                     y = df_real2.price.values,
                     text =  df_real2['underlying'],
-                    name = index
+                    name = index,
+                    line = {'color':'rgb(223,47,47)'}
                 )
         traces.append(trace2)
 
@@ -468,7 +464,8 @@ def historic_prices(hover, comp, tech):
     trace1 = go.Scatter(
         x = df_real1.real_dates,
         y = df_real1.price.values,
-        name = hover_text1
+        name = hover_text1,
+        line = {'color':'rgb(44,91,218)'}
     )
     traces.append(trace1)
     
@@ -477,7 +474,7 @@ def historic_prices(hover, comp, tech):
                 x = df_real1.real_dates,
                 y = df_real1.price.ewm(span = 20).mean().values,
                 name = hover_text1 + " EWMA",
-                line = {'dash':'dash'}
+                line = {'dash':'dash', 'color':'rgb(28,242,237)'}
         )       
         traces.append(ewm)
         
@@ -486,14 +483,14 @@ def historic_prices(hover, comp, tech):
                 x = df_real1.real_dates,
                 y = df_real1.price.ewm(span = 20).mean().values + df_real1.price.ewm(span = 20).std().values,
                 name = hover_text1 + " UBand",
-                line = {'dash':'dash'}
+                line = {'dash':'dash', 'color':'rgb(30,230,20)'}
         )       
         traces.append(uband)
         lband = go.Scatter(
                 x = df_real1.real_dates,
                 y = df_real1.price.ewm(span = 20).mean().values - df_real1.price.ewm(span = 20).std().values,
                 name = hover_text1 + " LBand",
-                line = {'dash':'dash'}
+                line = {'dash':'dash', 'color':'rgb(183,29,241)'}
         )
         traces.append(lband)
 
@@ -511,7 +508,8 @@ def historic_prices(hover, comp, tech):
         trace2 = go.Scatter(
             x = df_real2.real_dates,
             y = df_real2.price.values,
-            name = hover_text2
+            name = hover_text2,
+            line = {'color':'rgb(223,39,39)'}
         )
         traces.append(trace2)
         
@@ -520,7 +518,7 @@ def historic_prices(hover, comp, tech):
                     x = df_real2.real_dates,
                     y = df_real2.price.ewm(span = 20).mean().values,
                     name = hover_text2 + " EWMA",
-                    mode = 'dash'
+                    line = {'dash':'dash', 'color':'rgb(251,143,248)'}
             )       
             traces.append(trace4)
         
@@ -529,14 +527,14 @@ def historic_prices(hover, comp, tech):
                     x = df_real2.real_dates,
                     y = df_real2.price.ewm(span = 20).mean().values + df_real2.price.ewm(span = 20).std().values,
                     name = hover_text2 + " UBand",
-                    line = {'dash':'dash'}
+                    line = {'dash':'dash', 'color':'rgb(255,171,30)'}
             )       
             traces.append(uband)
             lband = go.Scatter(
                     x = df_real2.real_dates,
                     y = df_real2.price.ewm(span = 20).mean().values - df_real2.price.ewm(span = 20).std().values,
                     name = hover_text2 + " LBand",
-                    line = {'dash':'dash'}
+                    line = {'dash':'dash', 'color':'rgb(191,87,0)'}
             )
             traces.append(lband)
         
@@ -589,8 +587,8 @@ def return_distributions(hover, comp):
     ret1 = go.Histogram(
         x = returns1,
         name = hover_text1,
-        opacity = .75
-        
+        opacity = .75,
+        marker = {'color':'rgb(44,91,218)'}
     )
     corr = 1
     ret.append(ret1)
@@ -611,7 +609,8 @@ def return_distributions(hover, comp):
         ret2 = go.Histogram(
             x = returns2,
             name = hover_text2,
-            opacity = .5
+            opacity = .5,
+            marker = {'color':'rgb(223,39,39)'}
         )
         ret.append(ret2)
         
