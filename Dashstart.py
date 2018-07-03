@@ -236,7 +236,7 @@ app.layout = html.Div(children=[
         dcc.Graph(
             id = 'historic_prices',
         )
-    ],style={'borderTop' : 'rgb(30,30,30) solid'}),
+    ],style={'borderTop' : 'rgb(30,30,30) solid', 'bgcolor':'rgb(17,17,17)'}),
      # Checklist for technical indicators
     html.Div([
         dcc.Checklist(
