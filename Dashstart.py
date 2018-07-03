@@ -186,7 +186,7 @@ app.layout = html.Div(children=[
             id='main_graph'
             #set to empty at first because the 'update_graph' callback will initialize it for us
         )
-    ]),
+    ],style={'borderBottom' : 'rgb(30,30,30) solid'}),
     # to look at future curves of individual indexes
     html.Div([
         html.Div([
@@ -234,9 +234,9 @@ app.layout = html.Div(children=[
     #displays the historic prices of the given forwards
     html.Div([
         dcc.Graph(
-            id = 'historic_prices'
+            id = 'historic_prices',
         )
-    ]),
+    ],style={'borderTop' : 'rgb(30,30,30) solid'}),
      # Checklist for technical indicators
     html.Div([
         dcc.Checklist(
@@ -245,7 +245,7 @@ app.layout = html.Div(children=[
                        {'label': 'Bollinger Bands', 'value' : 'bb'}],
             values = []
         )
-    ]),
+    ],style={'borderBottom' : 'rgb(30,30,30) solid'}),
     # Returns distribution
     html.Div([
         dcc.Graph(
