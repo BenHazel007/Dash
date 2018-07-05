@@ -293,7 +293,25 @@ app.layout = html.Div(children=[
                 type = 'number',
                 value = 1
             )
-        ],style={'width': '30%', 'display': 'inline-block'})
+        ],style={'width': '10%', 'display': 'inline-block'})
+    ]),
+    html.Div([
+        html.Div([],style={'width': '10%', 'display': 'inline-block'}),
+        html.Div([
+            dcc.Input(
+                id = 'const1_den',
+                type = 'number',
+                value = 1
+            )
+        ],style={'width': '9.175%', 'display': 'inline-block', 'borderTop': 'black solid'}),
+        html.Div([],style={'width': '40.825%', 'display': 'inline-block'}),
+        html.Div([
+            dcc.Input(
+                id = 'const2_den',
+                type = 'number',
+                value = 1
+            )
+        ],style={'width': '9.175%', 'display': 'inline-block', 'borderTop': 'black solid'})
     ]),
     #the graph that displays the future curves
     html.Div([
@@ -524,10 +542,12 @@ def update_product_options(desk):
     dash.dependencies.Input('comp_check', 'values'),
     dash.dependencies.Input('custom_check', 'values'),
     dash.dependencies.Input('const1', 'value'),
+    dash.dependencies.Input('const1_den', 'value'),
     dash.dependencies.Input('op_drop', 'value'),
-    dash.dependencies.Input('const2', 'value')]
+    dash.dependencies.Input('const2', 'value'),
+    dash.dependencies.Input('const2_den', 'value')]
 )
-def update_price(index1, index2, date, comp, cust, const1, op, const2):
+def update_price(index1, index2, date, comp, cust, const1, const1_den, op, const2, const2_den):
     traces = []
     if 'custom' not in cust:
         #dfi1 filters out only data for the given index and the given purchase date and any prices that are at or below 0
@@ -602,12 +622,20 @@ def update_price(index1, index2, date, comp, cust, const1, op, const2):
 
         df_temp1 = df_real1[ (df_real1['real_dates'].isin(df_real2['real_dates'])) ]
         df_temp2 = df_real2[ (df_real2['real_dates'].isin(df_real1['real_dates'])) ]
+        if const1_den == 0:
+            df_temp1.loc[:,'price'] *= const1
+        else:
+            df_temp1.loc[:,'price'] *= (const1/const1_den)
+        if const2_den == 0:
+            df_temp2.loc[:,'price'] *= const2
+        else:
+            df_temp2.loc[:,'price'] *= (const2/const2_den)
         df_real3 = pd.DataFrame()
-        df_real3['price'] = df_temp1['price'].values + df_temp2['price'].values
+        if op == '+':
+            df_real3['price'] = df_temp1['price'].values + df_temp2['price'].values
+        elif op == '-':
+            df_real3['price'] = df_temp1['price'].values - df_temp2['price'].values
         df_real3['real_dates'] = df_temp1['real_dates'].values
-        print(df_temp1)
-        print(df_temp2)
-        print(df_real3)
         trace3 = go.Scatter(
             x = df_real3.real_dates,
             y = df_real3.price.values,
@@ -673,7 +701,7 @@ def historic_prices(hover, comp, tech):
                 x = df_real1.real_dates,
                 y = df_real1.price.ewm(span = 20).mean().values,
                 name = hover_text1 + " EWMA",
-                line = {'dash':'dash'}
+                line = {'dash':'dash', 'color':'rgb(251,143,248)'}
         )       
         traces.append(ewm)
         
@@ -682,14 +710,14 @@ def historic_prices(hover, comp, tech):
                 x = df_real1.real_dates,
                 y = df_real1.price.ewm(span = 20).mean().values + df_real1.price.ewm(span = 20).std().values,
                 name = hover_text1 + " UBand",
-                line = {'dash':'dash'}
+                line = {'dash':'dash', 'color':'rgb(255,171,30)'}
         )       
         traces.append(uband)
         lband = go.Scatter(
                 x = df_real1.real_dates,
                 y = df_real1.price.ewm(span = 20).mean().values - df_real1.price.ewm(span = 20).std().values,
                 name = hover_text1 + " LBand",
-                line = {'dash':'dash'}
+                line = {'dash':'dash', 'color':'rgb(191,87,0)'}
         )
         traces.append(lband)
     if 'vol' in tech:
@@ -698,7 +726,7 @@ def historic_prices(hover, comp, tech):
                 y = returns1.rolling(20).std(),
                 name = hover_text1 + " Volatility",
                 line = {'dash':'dash',
-                        'color' : 'orange'},
+                        'color' : 'rgb(232, 40, 126)'},
                 yaxis = 'y2',
         )
         traces.append(vol)
@@ -731,7 +759,7 @@ def historic_prices(hover, comp, tech):
                     x = df_real2.real_dates,
                     y = df_real2.price.ewm(span = 20).mean().values,
                     name = hover_text2 + " EWMA",
-                    line = {'dash':'dash'},
+                    line = {'dash':'dash', 'color':'rgb(28,242,237)'},
                     yaxis = 'y3',
             )       
             traces.append(trace4)
@@ -741,7 +769,7 @@ def historic_prices(hover, comp, tech):
                     x = df_real2.real_dates,
                     y = df_real2.price.ewm(span = 20).mean().values + df_real2.price.ewm(span = 20).std().values,
                     name = hover_text2 + " UBand",
-                    line = {'dash':'dash'},
+                    line = {'dash':'dash', 'color':'rgb(30,230,20)'},
                     yaxis = 'y3',
             )       
             traces.append(uband)
@@ -749,7 +777,7 @@ def historic_prices(hover, comp, tech):
                     x = df_real2.real_dates,
                     y = df_real2.price.ewm(span = 20).mean().values - df_real2.price.ewm(span = 20).std().values,
                     name = hover_text2 + " LBand",
-                    line = {'dash':'dash'},
+                    line = {'dash':'dash', 'color':'rgb(183,29,241)'},
                     yaxis = 'y3',
             )
             traces.append(lband)
@@ -760,7 +788,7 @@ def historic_prices(hover, comp, tech):
                     y = returns2.rolling(20).std(),
                     name = hover_text2 + " Volatility",
                     line = {'dash':'dash',
-                            'color' : 'green'},
+                            'color' : 'rgb(120, 49, 243)'},
                     yaxis = 'y4',
             )
             traces.append(vol2)
