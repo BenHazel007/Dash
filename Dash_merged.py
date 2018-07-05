@@ -739,6 +739,8 @@ def historic_prices(hover, comp, tech, cust, const1, const1_den, op, const2, con
                     yaxis = 'y2',
             )
             traces.append(vol)
+        
+        title = '<b>{}'.format(hover_text1) + " Historical Prices"
 
     if ('comp' in comp) or ('custom' in cust):
         if 'custom' not in cust:
@@ -831,10 +833,12 @@ def historic_prices(hover, comp, tech, cust, const1, const1_den, op, const2, con
         returns3 = df_real3.price.astype(float) - df_real3.price.astype(float).shift(1)
         returns3.index = df_real3['real_dates']
         returns3 = returns3[~np.isnan(returns3)] 
+        hover_text3 = hover_text1 + ' ' + hover_text2
         trace3 = go.Scatter(
             x = df_real3.real_dates,
             y = df_real3.price.values,
-            line = {'color' : ('rgb(0, 215, 0)')}
+            name = hover_text3,
+            line = {'color' : 'rgb(0, 215, 0)'}
         )
         traces.append(trace3)
 
@@ -842,7 +846,7 @@ def historic_prices(hover, comp, tech, cust, const1, const1_den, op, const2, con
             emw3 = go.Scatter(
                     x = df_real3.real_dates,
                     y = df_real3.price.ewm(span = 20).mean().values,
-                    name = hover_text2 + " EWMA",
+                    name = hover_text3 + " EWMA",
                     line = {'dash':'dash', 'color':'rgb(71,180,109)'}
             )       
             traces.append(emw3)
@@ -851,14 +855,14 @@ def historic_prices(hover, comp, tech, cust, const1, const1_den, op, const2, con
             uband3 = go.Scatter(
                     x = df_real3.real_dates,
                     y = df_real3.price.ewm(span = 20).mean().values + df_real3.price.ewm(span = 20).std().values,
-                    name = hover_text2 + " UBand",
+                    name = hover_text3 + " UBand",
                     line = {'dash':'dash', 'color':'rgb(231,225,20)'}
             )       
             traces.append(uband3)
             lband3 = go.Scatter(
                     x = df_real3.real_dates,
                     y = df_real3.price.ewm(span = 20).mean().values - df_real3.price.ewm(span = 20).std().values,
-                    name = hover_text2 + " LBand",
+                    name = hover_text3 + " LBand",
                     line = {'dash':'dash', 'color':'rgb(45,206,198)'}
             )
             traces.append(lband3)
@@ -867,15 +871,16 @@ def historic_prices(hover, comp, tech, cust, const1, const1_den, op, const2, con
             vol3 = go.Scatter(
                     x = df_real3.real_dates,
                     y = returns3.rolling(20).std(),
-                    name = hover_text2 + " Volatility",
+                    name = hover_text3 + " Volatility",
                     line = {'dash':'dash',
                             'color' : 'rgb(5, 143, 209)'},
                     yaxis = 'y4',
             )
             traces.append(vol3)
+        fraction1 = str(const1) + "/" + str(const1_den)
+        fraction2 = str(const2) + "/" + str(const2_den)
+        title = '<b>{}'.format(fraction1)  + " " + hover_text1 + " " + op + " " + fraction2 +  " " + hover_text2 + " Historical Price"
 
-    else: 
-        title = '<b>{}'.format(hover_text1) + " Historical Prices"
 
     
         
@@ -1016,12 +1021,13 @@ def return_distributions(hover, comp, cust, const1, const1_den, op, const2, cons
         returns3 = df_real3.price.astype(float) - df_real3.price.astype(float).shift(1)
         returns3.index = df_real3['real_dates']
         returns3 = returns3[~np.isnan(returns3)] 
-        ret2 = go.Histogram(
+        hover_text3 = hover_text1 + ' ' + hover_text2
+        ret3 = go.Histogram(
             x = returns3,
-            name = hover_text2,
+            name = hover_text3,
             marker = {'color' : 'rgb(0, 215, 0)'}
         )
-        ret.append(ret2)
+        ret.append(ret3)
         corr = 1
             
         
