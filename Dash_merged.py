@@ -639,7 +639,7 @@ def update_price(index1, index2, date, comp, cust, const1, const1_den, op, const
         trace3 = go.Scatter(
             x = df_real3.real_dates,
             y = df_real3.price.values,
-            text =  df_real1['underlying'],
+            text =  df_temp1['underlying'].values + ' ' + df_temp2['underlying'].values,
             name = index1,
             line = {'color' : ('rgb(0, 215, 0)')}
         )
@@ -671,11 +671,19 @@ def update_price(index1, index2, date, comp, cust, const1, const1_den, op, const
     dash.dependencies.Output('historic_prices', 'figure'),
     [dash.dependencies.Input('price_graph', 'hoverData'),
     dash.dependencies.Input('comp_check', 'values'),
-    dash.dependencies.Input('technicals', 'values')]
+    dash.dependencies.Input('technicals', 'values'),
+    dash.dependencies.Input('custom_check', 'values'),
+    dash.dependencies.Input('const1', 'value'),
+    dash.dependencies.Input('const1_den', 'value'),
+    dash.dependencies.Input('op_drop', 'value'),
+    dash.dependencies.Input('const2', 'value'),
+    dash.dependencies.Input('const2_den', 'value')]
 )
-def historic_prices(hover, comp, tech):
+def historic_prices(hover, comp, tech, cust, const1, const1_den, op, const2, const2_den):
     traces = []
     hover_text1 = hover['points'][0]['text']
+    if 'custom' in cust:
+        hover_text1 = str(hover_text1).split(" ")[0]
     df1 = dfi[ (dfi['underlying'] == hover_text1) ]
     df1 = df1[ (df1['price'].astype(float) > 0) ]
     real_dates1 = []
@@ -688,51 +696,57 @@ def historic_prices(hover, comp, tech):
     returns1 = df_real1.price.astype(float).values - df_real1.price.astype(float).shift(1)
     returns1.index = df_real1['real_dates']
     returns1 = returns1[~np.isnan(returns1)]
-    trace1 = go.Scatter(
-        x = df_real1.real_dates,
-        y = df_real1.price.values,
-        name = hover_text1,
-        line = {'color' : ('rgb(255, 0, 0)')}
-    )
-    traces.append(trace1)
-    
-    if 'ewma' in tech:
-        ewm = go.Scatter(
-                x = df_real1.real_dates,
-                y = df_real1.price.ewm(span = 20).mean().values,
-                name = hover_text1 + " EWMA",
-                line = {'dash':'dash', 'color':'rgb(251,143,248)'}
-        )       
-        traces.append(ewm)
+    if 'custom' not in cust:
+        trace1 = go.Scatter(
+            x = df_real1.real_dates,
+            y = df_real1.price.values,
+            name = hover_text1,
+            line = {'color' : 'rgb(255, 0, 0)'}
+        )
+        traces.append(trace1)
         
-    if 'bb' in tech:
-        uband = go.Scatter(
-                x = df_real1.real_dates,
-                y = df_real1.price.ewm(span = 20).mean().values + df_real1.price.ewm(span = 20).std().values,
-                name = hover_text1 + " UBand",
-                line = {'dash':'dash', 'color':'rgb(255,171,30)'}
-        )       
-        traces.append(uband)
-        lband = go.Scatter(
-                x = df_real1.real_dates,
-                y = df_real1.price.ewm(span = 20).mean().values - df_real1.price.ewm(span = 20).std().values,
-                name = hover_text1 + " LBand",
-                line = {'dash':'dash', 'color':'rgb(191,87,0)'}
-        )
-        traces.append(lband)
-    if 'vol' in tech:
-        vol = go.Scatter(
-                x = df_real1.real_dates,
-                y = returns1.rolling(20).std(),
-                name = hover_text1 + " Volatility",
-                line = {'dash':'dash',
-                        'color' : 'rgb(232, 40, 126)'},
-                yaxis = 'y2',
-        )
-        traces.append(vol)
+        if 'ewma' in tech:
+            ewm = go.Scatter(
+                    x = df_real1.real_dates,
+                    y = df_real1.price.ewm(span = 20).mean().values,
+                    name = hover_text1 + " EWMA",
+                    line = {'dash':'dash', 'color':'rgb(251,143,248)'}
+            )       
+            traces.append(ewm)
+            
+        if 'bb' in tech:
+            uband = go.Scatter(
+                    x = df_real1.real_dates,
+                    y = df_real1.price.ewm(span = 20).mean().values + df_real1.price.ewm(span = 20).std().values,
+                    name = hover_text1 + " UBand",
+                    line = {'dash':'dash', 'color':'rgb(255,171,30)'}
+            )       
+            traces.append(uband)
+            lband = go.Scatter(
+                    x = df_real1.real_dates,
+                    y = df_real1.price.ewm(span = 20).mean().values - df_real1.price.ewm(span = 20).std().values,
+                    name = hover_text1 + " LBand",
+                    line = {'dash':'dash', 'color':'rgb(191,87,0)'}
+            )
+            traces.append(lband)
+        if 'vol' in tech:
+            vol = go.Scatter(
+                    x = df_real1.real_dates,
+                    y = returns1.rolling(20).std(),
+                    name = hover_text1 + " Volatility",
+                    line = {'dash':'dash',
+                            'color' : 'rgb(232, 40, 126)'},
+                    yaxis = 'y2',
+            )
+            traces.append(vol)
 
-    if 'comp' in comp:
-        hover_text2 = hover['points'][1]['text']
+    if ('comp' in comp) or ('custom' in cust):
+        if 'custom' not in cust:
+            hover_text2 = hover['points'][1]['text']
+        else:
+            hover_text2 = hover['points'][0]['text']
+            hover_text2 = str(hover_text2).split(" ")[1]
+            
         df2 = dfi[ (dfi['underlying'] == hover_text2) ]
         df2 = df2[ (df2['price'].astype(float) > 0) ]
         real_dates2 = []
@@ -744,60 +758,126 @@ def historic_prices(hover, comp, tech):
         df_real2.sort_values(by=['real_dates'], inplace=True)
         returns2 = df_real2.price.astype(float) - df_real2.price.astype(float).shift(1)
         returns2.index = df_real2['real_dates']
-        returns2 = returns2[~np.isnan(returns2)]    
-        trace2 = go.Scatter(
-            x = df_real2.real_dates,
-            y = df_real2.price.values,
-            name = hover_text2,
-            yaxis = 'y3',
-            line = {'color' : ('rgb(0, 0, 255)')}
-        )
-        traces.append(trace2)
-        
-        if 'ewma' in tech:
-            trace4 = go.Scatter(
-                    x = df_real2.real_dates,
-                    y = df_real2.price.ewm(span = 20).mean().values,
-                    name = hover_text2 + " EWMA",
-                    line = {'dash':'dash', 'color':'rgb(28,242,237)'},
-                    yaxis = 'y3',
-            )       
-            traces.append(trace4)
-        
-        if 'bb' in tech:
-            uband = go.Scatter(
-                    x = df_real2.real_dates,
-                    y = df_real2.price.ewm(span = 20).mean().values + df_real2.price.ewm(span = 20).std().values,
-                    name = hover_text2 + " UBand",
-                    line = {'dash':'dash', 'color':'rgb(30,230,20)'},
-                    yaxis = 'y3',
-            )       
-            traces.append(uband)
-            lband = go.Scatter(
-                    x = df_real2.real_dates,
-                    y = df_real2.price.ewm(span = 20).mean().values - df_real2.price.ewm(span = 20).std().values,
-                    name = hover_text2 + " LBand",
-                    line = {'dash':'dash', 'color':'rgb(183,29,241)'},
-                    yaxis = 'y3',
+        returns2 = returns2[~np.isnan(returns2)] 
+        if 'custom' not in cust:   
+            trace2 = go.Scatter(
+                x = df_real2.real_dates,
+                y = df_real2.price.values,
+                name = hover_text2,
+                yaxis = 'y3',
+                line = {'color' : 'rgb(0, 0, 255)'}
             )
-            traces.append(lband)
+            traces.append(trace2)
             
-        if 'vol' in tech:
-            vol2 = go.Scatter(
-                    x = df_real2.real_dates,
-                    y = returns2.rolling(20).std(),
-                    name = hover_text2 + " Volatility",
-                    line = {'dash':'dash',
-                            'color' : 'rgb(120, 49, 243)'},
-                    yaxis = 'y4',
-            )
-            traces.append(vol2)
+            if 'ewma' in tech:
+                trace4 = go.Scatter(
+                        x = df_real2.real_dates,
+                        y = df_real2.price.ewm(span = 20).mean().values,
+                        name = hover_text2 + " EWMA",
+                        line = {'dash':'dash', 'color':'rgb(28,242,237)'},
+                        yaxis = 'y3',
+                )       
+                traces.append(trace4)
+            
+            if 'bb' in tech:
+                uband = go.Scatter(
+                        x = df_real2.real_dates,
+                        y = df_real2.price.ewm(span = 20).mean().values + df_real2.price.ewm(span = 20).std().values,
+                        name = hover_text2 + " UBand",
+                        line = {'dash':'dash', 'color':'rgb(30,230,20)'},
+                        yaxis = 'y3',
+                )       
+                traces.append(uband)
+                lband = go.Scatter(
+                        x = df_real2.real_dates,
+                        y = df_real2.price.ewm(span = 20).mean().values - df_real2.price.ewm(span = 20).std().values,
+                        name = hover_text2 + " LBand",
+                        line = {'dash':'dash', 'color':'rgb(183,29,241)'},
+                        yaxis = 'y3',
+                )
+                traces.append(lband)
+                
+            if 'vol' in tech:
+                vol2 = go.Scatter(
+                        x = df_real2.real_dates,
+                        y = returns2.rolling(20).std(),
+                        name = hover_text2 + " Volatility",
+                        line = {'dash':'dash',
+                                'color' : 'rgb(120, 49, 243)'},
+                        yaxis = 'y4',
+                )
+                traces.append(vol2)
         
       
         title = '<b>{}'.format(hover_text1) + " and " + hover_text2 + " Historical Price"
 
+    if 'custom' in cust:
+        df_temp1 = df_real1[ (df_real1['real_dates'].isin(df_real2['real_dates'])) ]
+        df_temp2 = df_real2[ (df_real2['real_dates'].isin(df_real1['real_dates'])) ]
+        if const1_den == 0:
+            df_temp1.loc[:,'price'] *= const1
+        else:
+            df_temp1.loc[:,'price'] *= (const1/const1_den)
+        if const2_den == 0:
+            df_temp2.loc[:,'price'] *= const2
+        else:
+            df_temp2.loc[:,'price'] *= (const2/const2_den)
+        df_real3 = pd.DataFrame()
+        if op == '+':
+            df_real3['price'] = df_temp1['price'].values + df_temp2['price'].values
+        elif op == '-':
+            df_real3['price'] = df_temp1['price'].values - df_temp2['price'].values
+        df_real3['real_dates'] = df_temp1['real_dates'].values
+        returns3 = df_real3.price.astype(float) - df_real3.price.astype(float).shift(1)
+        returns3.index = df_real3['real_dates']
+        returns3 = returns3[~np.isnan(returns3)] 
+        trace3 = go.Scatter(
+            x = df_real3.real_dates,
+            y = df_real3.price.values,
+            line = {'color' : ('rgb(0, 215, 0)')}
+        )
+        traces.append(trace3)
+
+        if 'ewma' in tech:
+            emw3 = go.Scatter(
+                    x = df_real3.real_dates,
+                    y = df_real3.price.ewm(span = 20).mean().values,
+                    name = hover_text2 + " EWMA",
+                    line = {'dash':'dash', 'color':'rgb(71,180,109)'}
+            )       
+            traces.append(emw3)
+        
+        if 'bb' in tech:
+            uband3 = go.Scatter(
+                    x = df_real3.real_dates,
+                    y = df_real3.price.ewm(span = 20).mean().values + df_real3.price.ewm(span = 20).std().values,
+                    name = hover_text2 + " UBand",
+                    line = {'dash':'dash', 'color':'rgb(231,225,20)'}
+            )       
+            traces.append(uband3)
+            lband3 = go.Scatter(
+                    x = df_real3.real_dates,
+                    y = df_real3.price.ewm(span = 20).mean().values - df_real3.price.ewm(span = 20).std().values,
+                    name = hover_text2 + " LBand",
+                    line = {'dash':'dash', 'color':'rgb(45,206,198)'}
+            )
+            traces.append(lband3)
+
+        if 'vol' in tech:
+            vol3 = go.Scatter(
+                    x = df_real3.real_dates,
+                    y = returns3.rolling(20).std(),
+                    name = hover_text2 + " Volatility",
+                    line = {'dash':'dash',
+                            'color' : 'rgb(5, 143, 209)'},
+                    yaxis = 'y4',
+            )
+            traces.append(vol3)
+
     else: 
         title = '<b>{}'.format(hover_text1) + " Historical Prices"
+
+    
         
     return {
         'data': traces,
@@ -841,11 +921,19 @@ def historic_prices(hover, comp, tech):
 @app.callback(
     dash.dependencies.Output('return_dist', 'figure'),
     [dash.dependencies.Input('price_graph', 'hoverData'),
-     dash.dependencies.Input('comp_check', 'values')]
+    dash.dependencies.Input('comp_check', 'values'),
+    dash.dependencies.Input('custom_check', 'values'),
+    dash.dependencies.Input('const1', 'value'),
+    dash.dependencies.Input('const1_den', 'value'),
+    dash.dependencies.Input('op_drop', 'value'),
+    dash.dependencies.Input('const2', 'value'),
+    dash.dependencies.Input('const2_den', 'value')]
 )
-def return_distributions(hover, comp):
+def return_distributions(hover, comp, cust, const1, const1_den, op, const2, const2_den):
     ret = []
     hover_text1 = hover['points'][0]['text']
+    if 'custom' in cust:
+        hover_text1 = str(hover_text1).split(" ")[0]
     df1 = dfi[ (dfi['underlying'] == hover_text1) ]
     df1 = df1[ (df1['price'].astype(float) > 0) ]
     real_dates1 = []
@@ -858,16 +946,22 @@ def return_distributions(hover, comp):
     returns1 = df_real1.price.astype(float).values - df_real1.price.astype(float).shift(1)
     returns1.index = df_real1['real_dates']
     returns1 = returns1[~np.isnan(returns1)]
-    ret1 = go.Histogram(
-        x = returns1,
-        name = hover_text1,
-        opacity = .75
-        
-    )
-    corr = 1
-    ret.append(ret1)
-    if 'comp' in comp:
-        hover_text2 = hover['points'][1]['text']
+    if 'custom' not in cust:
+        ret1 = go.Histogram(
+            x = returns1,
+            name = hover_text1,
+            opacity = .75,
+            marker = {'color' : 'rgb(255, 0, 0)'}
+        )
+        corr = 1
+        ret.append(ret1)
+
+    if ('comp' in comp) or ('custom' in cust):
+        if 'custom' not in cust:
+            hover_text2 = hover['points'][1]['text']
+        else:
+            hover_text2 = hover['points'][0]['text']
+            hover_text2 = str(hover_text2).split(" ")[1]
         df2 = dfi[ (dfi['underlying'] == hover_text2) ]
         df2 = df2[ (df2['price'].astype(float) > 0) ]
         real_dates2 = []
@@ -880,31 +974,61 @@ def return_distributions(hover, comp):
         returns2 = df_real2.price.astype(float) - df_real2.price.astype(float).shift(1)
         returns2.index = df_real2['real_dates']
         returns2 = returns2[~np.isnan(returns2)]
+        if 'custom' not in cust:
+            ret2 = go.Histogram(
+                x = returns2,
+                name = hover_text2,
+                opacity = .5,
+                marker = {'color' : 'rgb(0, 0, 255)'}
+            )
+            ret.append(ret2)
+        
+            if returns1.shape[0] > returns2.shape[0]:
+                mask = [idx in returns2.index for idx in returns1.index]
+                returns1 = returns1[mask]
+                mask = [idx in returns1.index for idx in returns2.index]
+                returns2 = returns2[mask]
+            else: 
+                mask = [idx in returns1.index for idx in returns2.index]
+                returns2 = returns2[mask]
+                mask = [idx in returns2.index for idx in returns1.index]
+                returns1 = returns1[mask]
+            
+            corr = np.corrcoef(returns1, returns2)[0][1]
+
+    if 'custom' in cust:
+        df_temp1 = df_real1[ (df_real1['real_dates'].isin(df_real2['real_dates'])) ]
+        df_temp2 = df_real2[ (df_real2['real_dates'].isin(df_real1['real_dates'])) ]
+        if const1_den == 0:
+            df_temp1.loc[:,'price'] *= const1
+        else:
+            df_temp1.loc[:,'price'] *= (const1/const1_den)
+        if const2_den == 0:
+            df_temp2.loc[:,'price'] *= const2
+        else:
+            df_temp2.loc[:,'price'] *= (const2/const2_den)
+        df_real3 = pd.DataFrame()
+        if op == '+':
+            df_real3['price'] = df_temp1['price'].values + df_temp2['price'].values
+        elif op == '-':
+            df_real3['price'] = df_temp1['price'].values - df_temp2['price'].values
+        df_real3['real_dates'] = df_temp1['real_dates'].values
+        returns3 = df_real3.price.astype(float) - df_real3.price.astype(float).shift(1)
+        returns3.index = df_real3['real_dates']
+        returns3 = returns3[~np.isnan(returns3)] 
         ret2 = go.Histogram(
-            x = returns2,
+            x = returns3,
             name = hover_text2,
-            opacity = .5
+            marker = {'color' : 'rgb(0, 215, 0)'}
         )
         ret.append(ret2)
-        
-        if returns1.shape[0] > returns2.shape[0]:
-            mask = [idx in returns2.index for idx in returns1.index]
-            returns1 = returns1[mask]
-            mask = [idx in returns1.index for idx in returns2.index]
-            returns2 = returns2[mask]
-        else: 
-            mask = [idx in returns1.index for idx in returns2.index]
-            returns2 = returns2[mask]
-            mask = [idx in returns2.index for idx in returns1.index]
-            returns1 = returns1[mask]
-        
-        corr = np.corrcoef(returns1, returns2)[0][1]
+        corr = 1
             
         
     return {
         'data': ret,
         'layout' : go.Layout(
-                barmode='stack',
+                barmode='overlay',
                 
                 annotations = [{'x': 0, 'y': 1, 'xanchor': 'left', 'yanchor': 'bottom',
                     'xref': 'paper', 'yref': 'paper', 'showarrow': False,
