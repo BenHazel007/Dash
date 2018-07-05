@@ -383,7 +383,7 @@ def update_graph(ind, pos, prod, desk, val_date):
 #        for p in prod:
 #            dfd1 = dfd_temp[ (dfd_temp['Product1'] == p) ]
 #            #for each index that is chosen in the ind_drop
-    for i in dfd1.Index.unique():
+    for i in ind:
         #dfd2 uses the filters that dfd1 applied and filters out each index from dfd1
         #dfd2 is a temporary dataframe that is reset for each chosen index
         dfd2 = dfd1[ (dfd1['Index'] == i) ]
