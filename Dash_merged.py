@@ -221,6 +221,10 @@ app.layout = html.Div(children=[
         'All Indexes',
         id = 'all_button'
     ),
+    html.Button(
+        'Clear',
+        id = 'clear'
+    ),
     #
     html.Div([
         #the poisitions graph
@@ -456,7 +460,15 @@ def update_graph(ind, pos, prod, desk, val_date):
 #def update_date(date):
 #    return date[0]['value']
 
+# clears the options for everything by clearing the desk value
+@app.callback(
+    dash.dependencies.Output('desk_drop', 'value'),
+    [dash.dependencies.Input('clear', 'n_clicks')]
+)
+def clear(clear):
+    return []
 
+# chooses all products available for the given desks
 @app.callback(
     dash.dependencies.Output('prod_drop', 'value'),
     [dash.dependencies.Input('all_button_prod', 'n_clicks'),
@@ -468,7 +480,7 @@ def choose_all_prod(n_clicks, desk):
     prods.extend(df_temp['Product1'].unique())
     return prods
 
-
+# chooses all position types for the given products in the given desks
 @app.callback(
     dash.dependencies.Output('pos_drop', 'value'),
     [dash.dependencies.Input('all_button_postype', 'n_clicks'),
@@ -477,7 +489,6 @@ def choose_all_prod(n_clicks, desk):
 )
 def choose_all_pos(n_clicks, desk, prod):
     pos = []
-    
     df_temp = dfd[ (dfd['Desk'].isin(desk)) ]
     df_temp2 = df_temp[ (df_temp['Product1'].isin(prod)) ]
     pos.extend(df_temp2['PositionType'].unique())
@@ -486,6 +497,7 @@ def choose_all_pos(n_clicks, desk, prod):
 
 
 
+# chooses all indexes for the given products, desks, and position types
 @app.callback(
     dash.dependencies.Output('ind_drop', 'value'),
     [dash.dependencies.Input('all_button', 'n_clicks'),
@@ -506,14 +518,18 @@ def choose_all(n_clicks, prod, desk, pos):
 #makes sure you can only choose indexes that are part of the currently chosen product
 @app.callback(
     dash.dependencies.Output('ind_drop', 'options'),
-    [dash.dependencies.Input('prod_drop', 'value')]
+    [dash.dependencies.Input('desk_drop', 'value'),
+    dash.dependencies.Input('prod_drop', 'value'),
+    dash.dependencies.Input('pos_drop', 'value')]
 )
-def update_forward_options(prod):
+def update_forward_options(desk, prod, pos):
     #Initializes the list of indexes
     indexes2 = []
-    for p in prod:
-        dfd_temp = dfd[ (dfd['Product1'] == p) ]
-        indexes2.extend(dfd_temp['Index'].unique())
+    
+    df_temp = dfd[ (dfd['Desk'].isin(desk)) ]
+    df_temp2 = df_temp[ (df_temp['Product1'].isin(prod)) ]
+    df_temp3 = df_temp2[ (df_temp2['PositionType'].isin(pos)) ]
+    indexes2.extend(df_temp3['Index'].unique())
 
     return [{'label':i, 'value':i} for i in indexes2]
 
@@ -879,7 +895,7 @@ def historic_prices(hover, comp, tech, cust, const1, const1_den, op, const2, con
             traces.append(vol3)
         fraction1 = str(const1) + "/" + str(const1_den)
         fraction2 = str(const2) + "/" + str(const2_den)
-        title = '<b>{}'.format(fraction1)  + " " + hover_text1 + " " + op + " " + fraction2 +  " " + hover_text2 + " Historical Price"
+        title = '<b>{}'.format(fraction1)  + " " + hover_text1 + "  " + op + "  " + fraction2 +  " " + hover_text2 + " Historical Price"
 
 
     
