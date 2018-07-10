@@ -91,8 +91,11 @@ def adjust_fwd(df):
     df = df.loc[df['QtyBBL'] != 0, :]
     return df
 
-#path = "S:\TradingSystemExtracts\Risk\DailyData\DailyPosition_{}0{}0{}.csv".format(datetime.now().year, datetime.now().month, datetime.now().day)
-#dfd = pd.read_csv(path)
+if datetime.now().day < 10:
+    path = "S:\TradingSystemExtracts\Risk\DailyData\DailyPosition_{}0{}0{}.csv".format(datetime.now().year, datetime.now().month, datetime.now().day)
+else:
+    path = "S:\TradingSystemExtracts\Risk\DailyData\DailyPosition_{}0{}{}.csv".format(datetime.now().year, datetime.now().month, datetime.now().day)
+dfd = pd.read_csv(path)
     
 
 #path = "S:\TradingSystemExtracts\Risk\DailyData\\"
@@ -111,7 +114,7 @@ def adjust_fwd(df):
 #dfd = pd.concat(temp)
 
 
-dfd = pd.read_csv('dashdata.csv')
+#dfd = pd.read_csv('dashdata.csv')
 dfd = adjust_fwd(dfd)
 
 #dfi uses the historic price files
@@ -271,6 +274,8 @@ app.layout = html.Div(children=[
             )
         ],style={'width': '10%', 'display': 'inline-block'})
     ]),
+    #for the scalars when combining 2 curves
+    #theres so many formatting things because they needed to line up nicely to look like fractions
     html.Div([
         html.Div([],style={'width': '10%', 'display': 'inline-block'}),
         html.Div([
@@ -590,6 +595,8 @@ def update_price(index1, index2, date, comp, cust, const1, const1_den, op, const
         )
         traces.append(trace1)
         if 'comp' in comp:
+            #the second curve
+            #same stuff as above but with a new curve
             dfi2 = dfi[ (dfi['name'] == index2) ]
             dfi2 = dfi2[ (dfi2['date'] == date) ]
             dfi2 = dfi2[ (dfi2['price'] > 0) ]
@@ -611,6 +618,8 @@ def update_price(index1, index2, date, comp, cust, const1, const1_den, op, const
                     )
             traces.append(trace2)
     else:
+        #if making a custom curve
+        #same stuff as above
         dfi1 = dfi[ (dfi['name'] == index1) ]
         dfi1 = dfi1[ (dfi1['date'] == date) ]
         dfi1 = dfi1[ (dfi1['price'] > 0) ]
@@ -636,8 +645,11 @@ def update_price(index1, index2, date, comp, cust, const1, const1_den, op, const
         df_real2['underlying'] = dfi['underlying']
         df_real2.sort_values(by = ['real_dates'], inplace=True)
 
+        #filters out the dates for each curve that aren't in the other curve which makes them have all the same dates
         df_temp1 = df_real1[ (df_real1['real_dates'].isin(df_real2['real_dates'])) ]
         df_temp2 = df_real2[ (df_real2['real_dates'].isin(df_real1['real_dates'])) ]
+        # multiplying the prices by the given scalar 
+        # dividing by 0 is bad so just ignore the denominator if its 0
         if const1_den == 0:
             df_temp1.loc[:,'price'] *= const1
         else:
@@ -646,11 +658,16 @@ def update_price(index1, index2, date, comp, cust, const1, const1_den, op, const
             df_temp2.loc[:,'price'] *= const2
         else:
             df_temp2.loc[:,'price'] *= (const2/const2_den)
+        #initializes a new empty dataframe that will be the sum of the 2 given curves
         df_real3 = pd.DataFrame()
+        #combine the given curves using the given operator
         if op == '+':
+            #sum with .values because of the way views of dataframes work
             df_real3['price'] = df_temp1['price'].values + df_temp2['price'].values
         elif op == '-':
             df_real3['price'] = df_temp1['price'].values - df_temp2['price'].values
+        #add the dates
+        #the dates are the same in df_temp1 and df_temp2 so it doesn't matter which one is used
         df_real3['real_dates'] = df_temp1['real_dates'].values
         trace3 = go.Scatter(
             x = df_real3.real_dates,
@@ -659,6 +676,7 @@ def update_price(index1, index2, date, comp, cust, const1, const1_den, op, const
             name = index1,
             line = {'color' : ('rgb(0, 215, 0)')}
         )
+        #trace3 will be the only trace in traces
         traces.append(trace3)
 
 
@@ -697,8 +715,10 @@ def update_price(index1, index2, date, comp, cust, const1, const1_den, op, const
 )
 def historic_prices(hover, comp, tech, cust, const1, const1_den, op, const2, const2_den):
     traces = []
+    #the data from the hovered over graph
     hover_text1 = hover['points'][0]['text']
     if 'custom' in cust:
+        #the custom graph will have different hover data 
         hover_text1 = str(hover_text1).split(" ")[0]
     df1 = dfi[ (dfi['underlying'] == hover_text1) ]
     df1 = df1[ (df1['price'].astype(float) > 0) ]
@@ -720,7 +740,7 @@ def historic_prices(hover, comp, tech, cust, const1, const1_den, op, const2, con
             line = {'color' : 'rgb(255, 0, 0)'}
         )
         traces.append(trace1)
-        
+        #the estimated weighted moving average
         if 'ewma' in tech:
             ewm = go.Scatter(
                     x = df_real1.real_dates,
@@ -729,8 +749,9 @@ def historic_prices(hover, comp, tech, cust, const1, const1_den, op, const2, con
                     line = {'dash':'dash', 'color':'rgb(251,143,248)'}
             )       
             traces.append(ewm)
-            
+        #the bollinger bands
         if 'bb' in tech:
+            #upper Bollinger band
             uband = go.Scatter(
                     x = df_real1.real_dates,
                     y = df_real1.price.ewm(span = 20).mean().values + df_real1.price.ewm(span = 20).std().values,
@@ -738,6 +759,7 @@ def historic_prices(hover, comp, tech, cust, const1, const1_den, op, const2, con
                     line = {'dash':'dash', 'color':'rgb(255,171,30)'}
             )       
             traces.append(uband)
+            #lower bollinger band
             lband = go.Scatter(
                     x = df_real1.real_dates,
                     y = df_real1.price.ewm(span = 20).mean().values - df_real1.price.ewm(span = 20).std().values,
