@@ -1152,7 +1152,7 @@ def index1_pre(button, preset):
     elif preset == 'WTI-Brent':
         return 'NY WTI'
     else:
-        return indexes[0]
+        return price_indexes[0]
 
 @app.callback(
     dash.dependencies.Output('index2_drop', 'value'),
@@ -1167,7 +1167,7 @@ def index2_pre(button, preset):
     elif preset == 'RB-EBOB':
         return 'AEBOBFNW'
     else:
-        return indexes[0]
+        return price_indexes[0]
 
 #Runs the app
 if __name__ == '__main__':
