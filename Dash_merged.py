@@ -259,6 +259,25 @@ app.layout = html.Div(children=[
     #when checked the second selected index is displayed against the first 
     html.Div([
         html.Div([
+            dcc.Dropdown(
+                id = 'presets',
+                options = [
+                    {'label': 'HOGO', 'value': 'HOGO' },
+                    {'label': 'HOBR', 'value': 'HOBR' },
+                    {'label': 'RBBR', 'value': 'RBBR' },
+                    {'label': 'WTI-Brent', 'value': 'WTI-Brent' },
+                    {'label': 'RB-EBOB', 'value': 'RB-EBOB' }
+                ],
+                value = ''
+            )
+        ],style={'width': '25%', 'display': 'inline-block'}),
+        html.Button(
+            'Choose Presest',
+            id = 'pre'
+        )
+    ]),
+    html.Div([
+        html.Div([
             dcc.Checklist(
             id= 'comp_check',
             options = [{'label': 'Compare Two Products', 'value': 'comp'}],
@@ -1084,6 +1103,71 @@ def return_distributions(hover, comp, cust, const1, const1_den, op, const2, cons
                     'text': "Correlation = {:+.4f}".format(corr)}]
         )
     }
+
+@app.callback(
+    dash.dependencies.Output('custom_check', 'values'),
+    [dash.dependencies.Input('pre', 'n_clicks')],
+    [dash.dependencies.State('presets', 'value')]
+)
+def check_cust_pre(button, preset):
+    if preset != '':
+        return 'custom'
+    else:
+        return ''
+
+@app.callback(
+    dash.dependencies.Output('const1', 'value'),
+    [dash.dependencies.Input('pre', 'n_clicks')],
+    [dash.dependencies.State('presets', 'value')]
+)
+def const1_pre(button, preset):
+    if preset == 'HOBR' or preset == 'RBBR':
+        return 42
+    else: 
+        return 1
+
+@app.callback(
+    dash.dependencies.Output('const2', 'value'),
+    [dash.dependencies.Input('pre', 'n_clicks')],
+    [dash.dependencies.State('presets', 'value')]
+)
+def const2_pre(button, preset):
+    if preset == 'HOGO':
+        return 0.003196
+    elif preset == 'RB-EBOB':
+        return .120048
+    else:
+        return 1
+
+@app.callback(
+    dash.dependencies.Output('index_drop', 'value'),
+    [dash.dependencies.Input('pre', 'n_clicks')],
+    [dash.dependencies.State('presets', 'value')]
+)
+def index1_pre(button, preset):      
+    if preset == 'HOGO' or preset == 'HOBR':
+        return 'NYMEX HEATING OIL'
+    elif preset == 'RBBR' or preset == 'RB-EBOB':
+        return 'Nymex RBOB'
+    elif preset == 'WTI-Brent':
+        return 'NY WTI'
+    else:
+        return indexes[0]
+
+@app.callback(
+    dash.dependencies.Output('index2_drop', 'value'),
+    [dash.dependencies.Input('pre', 'n_clicks')],
+    [dash.dependencies.State('presets', 'value')]
+)
+def index2_pre(button, preset):      
+    if preset == 'HOGO':
+        return 'ICE LS Gasoil'
+    elif preset == 'HOBR' or preset == 'RBBR' or preset == 'WTI-Brent':
+        return 'BZO Brent'
+    elif preset == 'RB-EBOB':
+        return 'AEBOBFNW'
+    else:
+        return indexes[0]
 
 #Runs the app
 if __name__ == '__main__':
